@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Отчёт о реализации проекта ЕРП Cloud</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+      background: linear-gradient(135deg, #58a6ff, #a371f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      color: var(--text);
+    }
+    .chart-wrap {
+      position: relative;
+      height: 320px;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+    .summary {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .summary-item {
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 120px;
+    }
+    .summary-item .val { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .summary-item .lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    th { color: var(--muted); font-weight: 500; }
+    .state-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .state-TODO { background: rgba(139, 148, 158, 0.3); }
+    .state-DRAFT { background: rgba(210, 153, 34, 0.2); }
+    .state-FOR\ GROOMING { background: rgba(163, 113, 247, 0.2); }
+    .state-FOR\ ANALYSIS { background: rgba(88, 166, 255, 0.2); }
+    .state-IN\ PROGRESS { background: rgba(63, 185, 80, 0.2); }
+    .state-FOR\ TEST { background: rgba(49, 109, 161, 0.2); }
+    .state-FOR\ VERIFICATION { background: rgba(49, 109, 161, 0.2); }
+    .state-REVIEW { background: rgba(163, 113, 247, 0.2); }
+    .state-FOR\ REVIEW { background: rgba(163, 113, 247, 0.2); }
+    .state-DONE { background: rgba(63, 185, 80, 0.3); }
+    .state-RELEASED { background: rgba(63, 185, 80, 0.5); }
+  </style>
+</head>
+<body>
+  <h1>Отчёт о реализации проекта ЕРП Cloud</h1>
+  <p class="sub">Середина активной фазы · Данные из YouTrack (Задачи ЕРП.xlsx)</p>
+
+  <div class="summary">
+    <div class="summary-item"><span class="val" id="totalTasks">0</span><span class="lbl">Всего задач</span></div>
+    <div class="summary-item"><span class="val" id="inProgress">0</span><span class="lbl">В работе</span></div>
+    <div class="summary-item"><span class="val" id="done">0</span><span class="lbl">Завершено</span></div>
+    <div class="summary-item"><span class="val" id="backlog">0</span><span class="lbl">Бэклог</span></div>
+  </div>
+
+  <div class="card">
+    <h2>1. Кумулятивная флоу-диаграмма (Cumulative Flow Diagram)</h2>
+    <p style="color: var(--muted); font-size: 0.85rem; margin: 0 0 16px 0;">
+      Показывает накопленное количество задач в каждом состоянии во времени. Помогает оценить стабильность потока и выявить узкие места.
+    </p>
+    <div class="chart-wrap"><canvas id="cfd"></canvas></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>2. Распределение по состояниям</h2>
+      <div class="chart-wrap"><canvas id="statePie"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>3. Горизонтальная диаграмма (по состояниям)</h2>
+      <div class="chart-wrap"><canvas id="stateBar"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>4. Burn-down (выполнение по времени)</h2>
+      <p style="color: var(--muted); font-size: 0.85rem; margin: 0 0 12px 0;">
+        Идеальная линия vs фактический прогресс.
+      </p>
+      <div class="chart-wrap"><canvas id="burndown"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>5. Распределение по типу задачи</h2>
+      <div class="chart-wrap"><canvas id="typePie"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>6. Таблица задач</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Заголовок</th><th>Состояние</th><th>Тип</th><th>Подсистема</th><th>Создана</th></tr>
+      </thead>
+      <tbody id="taskTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const DATA = { "project": "\u0415\u0420\u041f Cloud", "tasks": [{"id":"UCR-1012","created":"2026-03-13","type":"BUG","title":"BE: API: \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f \u043f\u0440\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 [] \u0432 \u043e\u0431\u044a\u0435\u043a\u0442\u043d\u044b\u0445 \u043f\u043e\u043b\u044f\u0445 \u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0432\u043c\u0435\u0441\u0442\u043e \u043e\u0448\u0438\u0431\u043a\u0438","updated":"2026-03-19","subsystem":"API","state":"FOR TEST"},{"updated":"2026-03-19","state":"TODO","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","created":"2025-04-24","id":"UCR-416","type":"FEATURE","title":"UCR. \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u041c\u0418"},{"subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"TODO","created":"2025-06-25","updated":"2026-03-19","type":"TASK","title":"FE: \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u041c\u0418 \u0432 \u0432\u0435\u0431","id":"UCR-490"},{"title":"BE: Meddevice_id \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f \u043f\u0440\u0438 \u0430\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u043e\u0439 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0435 \u043e\u0441\u043c\u043e\u0442\u0440\u0430","type":"BUG","id":"UCR-976","state":"REVIEW","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","created":"2026-03-02","updated":"2026-03-18"},{"id":"UCR-860","created":"2026-01-27","title":"\u041c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433 \u0433\u0435\u043e\u043a\u043e\u0434\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f","type":"TECH TASK","updated":"2026-03-18","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"FOR TEST"},{"created":"2026-02-27","id":"UCR-967","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"REVIEW","updated":"2026-03-18","title":"BE: \u0421\u0434\u0435\u043b\u0430\u0442\u044c manufacturer \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u043c \u0432 meddeviceType \u0438 \u043f\u043e \u0432\u0441\u0435\u043c \u0442\u0438\u043f\u0430\u043c","type":"TECH TASK"},{"subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","state":"TODO","created":"2026-02-27","updated":"2026-03-18","type":"TECH TASK","title":"BE: \u041f\u0435\u0440\u0435\u0432\u043e\u0434 \u043d\u0430 \u0440\u0430\u0431\u043e\u0442\u0443 \u0441 \u043f\u0430\u0440\u0442\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0439 \u0441\u0443\u0449\u043d\u043e\u0441\u0442\u044c\u044e","id":"UCR-965"},{"created":"2026-03-12","id":"UCR-1000","state":"TODO","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","updated":"2026-03-18","type":"TECH TASK","title":"BE: \u0412 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u0435 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438 \u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0434\u043e\u043b\u0436\u043d\u043e \u0431\u044b\u0442\u044c \u0442\u0440\u0438 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0445 \u044d\u0442\u0430\u043f\u0430 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438"},{"state":"TODO","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","updated":"2026-03-18","type":"BUG","title":"BE: \u041e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430 unprocessed  \u043f\u0440\u043e\u0438\u0441\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u043c\u043a\u0430\u0445 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u0445 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0439","created":"2026-03-12","id":"UCR-999"},{"created":"2026-02-27","id":"UCR-966","updated":"2026-03-18","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"TODO","title":"","type":"TECH TASK"},{"created":"2026-03-11","id":"UCR-995","updated":"2026-03-18","subsystem":"-","state":"DRAFT","type":"RELEASE","title":"\u0415\u0420\u041f Cloud | \u0412\u043d\u0435\u043f\u043b\u0430\u043d\u043e\u0432\u044b\u0439 \u0440\u0435\u043b\u0438\u0437 26.03 | v2.0-patch.1"},{"updated":"2026-03-18","subsystem":"-","state":"RELEASED","type":"RELEASE","title":"\u0415\u0420\u041f Cloud | \u041f\u043b\u0430\u043d\u043e\u0432\u044b\u0439 \u0440\u0435\u043b\u0438\u0437 05.03 | v2.0","created":"2026-01-28","id":"UCR-870"},{"id":"UCR-1016","created":"2026-03-18","title":"LOAD: \u041d\u0430\u0433\u0440\u0443\u0437\u043e\u0447\u043d\u043e\u0435 \u0442\u0435\u0441\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0434\u0436\u043e\u0431\u044b geocoding_bind_addresses","type":"TASK","subsystem":"-","state":"DRAFT","updated":"2026-03-18"},{"state":"TODO","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-18","title":"FE: \u0412\u044b\u0441\u043e\u0442\u0430 \u043f\u043e\u043b\u044f \u0441 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0439 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438 \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043c\u0430\u043a\u0435\u0442\u0443 \u0432 \u0444\u043e\u0440\u043c\u0435 \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0432\u043e\u0430\u043d\u0438\u044f \u0442\u0438\u043f\u0430 \u041c\u0418","type":"BUG","created":"2025-08-13","id":"UCR-722"},{"subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"TODO","updated":"2026-03-18","type":"BUG","title":"FE: \u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u043e\u0442\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0435 \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435, \u0418\u041d\u041d, \u041e\u0420\u0413\u041d \u0438 \u041e\u0420\u0413\u041d\u0418\u041f \u0443 \u041c\u041e","created":"2025-07-29","id":"UCR-628"},{"title":"\u041f\u0440\u0438\u043d\u0443\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e \u043f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c ROOT_UUID \u0434\u043b\u044f \u0434\u0435\u0444\u043e\u043b\u0442\u043d\u044b\u0445 \u0441\u0443\u0449\u043d\u043e\u0441\u0442\u0435\u0439 \u0440\u0435\u0433\u0438\u043e\u043d\u0430 \u0438 \u043b\u043e\u043a\u0430\u0446\u0438\u0438","type":"TECH TASK","updated":"2026-03-18","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","id":"UCR-968","created":"2026-02-27"},{"id":"UCR-969","created":"2026-02-27","type":"TECH TASK","title":"BE:  \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0444\u0438\u043b\u044c\u0442\u0440 isEnabled \u0434\u043b\u044f MeddeviceType","state":"GROOMING","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-18"},{"created":"2025-08-05","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"TODO","updated":"2026-03-18","type":"BUG","title":"BE: \u0412 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u0442\u0438\u043f\u0430 \u041c\u0418 \u043d\u0435\u0432\u0435\u0440\u043d\u043e \u0443\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0442\u043e\u0442, \u043a\u0442\u043e \u0434\u043e\u0431\u0430\u0432\u0438\u043b \u043f\u0440\u043e\u0448\u0438\u0432\u043a\u0443","id":"UCR-665"},{"title":"BE: \u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u043e\u0442\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0435 \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435, \u0418\u041d\u041d, \u041e\u0420\u0413\u041d \u0438 \u041e\u0420\u0413\u041d\u0418\u041f \u0443 \u041c\u041e","type":"BUG","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"TODO","updated":"2026-03-18","id":"UCR-629","created":"2025-07-29"},{"created":"2026-03-18","id":"UCR-1019","state":"TODO","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-18","title":"FE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u041c\u0418 \u043d\u0430 \u0444\u0440\u043e\u043d\u0442\u0435\u043d\u0434\u0435","type":"TASK"},{"updated":"2026-03-18","state":"IN PROGRESS","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","title":"\u0421\u043f\u0438\u0441\u043e\u043a \u041c\u0418","type":"FEATURE","created":"2025-06-24","id":"UCR-480"},{"state":"GROOMING","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-18","type":"TECH TASK","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0432\u0438\u0434\u0438\u043c\u043e\u0441\u0442\u044c \u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 datalens","created":"2026-03-12","id":"UCR-1011"},{"subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"TODO","created":"2026-01-28","updated":"2026-03-18","title":"\u0421\u0434\u0435\u043b\u0430\u0442\u044c \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433 \u0434\u0440\u0443\u0433\u0438\u0445 \u0444\u043e\u043d\u043e\u0432\u044b\u0445 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432","type":"TECH TASK","id":"UCR-872"},{"title":"\u0421\u043f\u0438\u0441\u043e\u043a \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0439 \u0432\u0026#xa0;\u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u041c\u041e","type":"FEATURE","subsystem":"-","state":"FOR VERIFICATION","updated":"2026-03-18","id":"UCR-1010","created":"2026-03-12"},{"state":"FOR GROOMING","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-18","title":"\u041d\u043e\u0432\u044b\u0439 \u043e\u0431\u044a\u0435\u043a\u0442 \u0026quot;\u0434\u0438\u0441\u043f\u0443\u0442\u0026quot; \u0438\u0026#xa0;\u0441\u0432\u044f\u0437\u0438 \u0441\u0026#xa0;\u043e\u0431\u044a\u0435\u043a\u0442\u0430\u043c\u0438 \u0441\u0438\u0441\u0442\u0435\u043c\u044b","type":"TECH TASK","created":"2026-03-12","id":"UCR-1009"},{"type":"TECH TASK","title":"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f API (\u0432\u0435\u0440\u0441\u0438\u043e\u043d\u043d\u043e\u0441\u0442\u044c \u041c\u0418)","state":"GROOMING","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-18","id":"UCR-1008","created":"2026-03-12"},{"title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u0440\u0430\u0432\u0438\u043b\u044c\u043d\u0443\u044e \u0443\u043d\u0438\u043a\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u043c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u0439","type":"TECH TASK","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","updated":"2026-03-18","id":"UCR-1002","created":"2026-03-12"},{"updated":"2026-03-18","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"TODO","type":"TASK","title":"BE: UCR. \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u041c\u0418 - \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0438 \u043d\u0430 \u0431\u044d\u043a\u0435","created":"2026-03-18","id":"UCR-1018"},{"id":"UCR-1004","created":"2026-03-12","type":"TECH TASK","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u0443\u043d\u0438\u043a\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u0438 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e \u043f\u043e: reg_number \u0438 mit_number","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","updated":"2026-03-18"},{"subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","updated":"2026-03-18","type":"TECH TASK","title":"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0431\u0435\u0441\u0441\u043b\u0435\u0434\u043d\u043e \u0440\u0430\u0437\u043c\u043d\u043e\u0436\u0435\u043d\u043d\u044b\u0435 \u0442\u0438\u043f\u044b","created":"2026-03-12","id":"UCR-1005"},{"created":"2026-03-12","id":"UCR-1006","updated":"2026-03-18","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","title":"\u041f\u0435\u0440\u0435\u043a\u0438\u043d\u0443\u0442\u044c \u0432\u0441\u0435 \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440\u044b \u041c\u0418 \u0441 \u0440\u0430\u0437\u043c\u043d\u043e\u0436\u0435\u043d\u043d\u044b\u0445 \u0442\u0438\u043f\u043e\u0432 \u043d\u0430 \u043a\u043e\u043c\u043f\u043e\u0437\u0438\u0442\u043d\u044b\u0435","type":"TECH TASK"},{"created":"2026-03-12","id":"UCR-1007","updated":"2026-03-18","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"GROOMING","title":"\u041a\u043e\u043c\u043f\u043e\u0437\u0438\u0442\u043d\u044b\u0435 \u0442\u0438\u043f\u044b \u041c\u0418","type":"TECH TASK"},{"id":"UCR-884","created":"2026-02-10","title":"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0437\u0430\u0434\u0435\u043f\u0440\u0435\u043a\u0435\u0439\u0447\u0435\u043d\u043d\u044b\u0435 \u043c\u0435\u0442\u043e\u0434\u044b","type":"TECH TASK","state":"TODO","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-18"},{"state":"DONE","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","updated":"2026-03-17","type":"TASK","title":"RND: \u0420\u0430\u0437\u043e\u0431\u0440\u0430\u0442\u044c\u0441\u044f \u043f\u043e\u0447\u0435\u043c\u0443 \u0443 \u043d\u0430\u0441 \u043d\u0435\u0442 \u043d\u0438 \u043e\u0434\u043d\u043e\u0433\u043e \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f \u0441\u0432\u044f\u0437\u0430\u043d\u043d\u043e\u0433\u043e \u0441 \u043d\u0435\u0443\u0434\u0430\u0432\u0448\u0438\u043c\u0441\u044f \u0433\u0435\u043e\u043a\u043e\u0434\u0438\u043d\u0433\u043e\u043c","created":"2026-01-28","id":"UCR-871"},{"updated":"2026-03-17","state":"TODO","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","title":"\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f \u0441 \u0434\u0435\u0432\u043e\u043f\u0441\u0430\u043c\u0438 \u043f\u043e \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433\u0443","type":"TECH TASK","created":"2026-01-30","id":"UCR-874"},{"updated":"2026-03-17","state":"TODO","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","type":"TECH TASK","title":"\u0410\u043a\u0442\u0443\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f BI","created":"2026-02-10","id":"UCR-881"},{"created":"2026-01-26","id":"UCR-846","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-16","type":"FEATURE","title":"\u0420\u0435\u0444\u0430\u043a\u0442\u043e\u0440\u0438\u043d\u0433 \u0415\u0420\u041f"},{"created":"2026-01-27","id":"UCR-859","updated":"2026-03-16","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"FOR VERIFICATION","type":"TECH TASK","title":"\u041c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438 \u0441 \u0413\u0418\u0421 \u0410\u0440\u0448\u0438\u043d"},{"subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","state":"DONE","created":"2026-02-12","updated":"2026-03-13","title":"\u0422\u041a: \u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u0440\u0430\u0431\u043e\u0442\u0443 \u0441 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f\u043c\u0438 \u0432 \u043a\u043e\u0434","type":"TASK","id":"UCR-888"},{"id":"UCR-987","created":"2026-03-04","title":"FE: \u0412\u043a\u043b\u0430\u0434\u043a\u0430 \u0026quot;\u041c\u0435\u0434\u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438\u0026quot; \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0443 \u041c\u041e \u043f\u043e \u043f\u0440\u044f\u043c\u043e\u0439 \u0441\u0441\u044b\u043b\u043a\u0435","type":"BUG","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"RELEASED","updated":"2026-03-13"},{"id":"UCR-811","created":"2025-10-03","title":"\u041e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u0442\u044c \u0441\u0445\u043e\u0434\u0438\u043c\u043e\u0441\u0442\u044c \u043f\u043e\u0432\u0435\u0440\u043e\u043a \u0432 \u043e\u0442\u0447\u0435\u0442\u0430\u0445 \u041e\u041e\u041e \u041c\u0435\u0434\u0438\u043a\u0443\u043c","type":"TECH TASK","updated":"2026-03-13","subsystem":"\u041e\u0442\u0447\u0451\u0442\u044b","state":"RELEASED"},{"id":"UCR-984","type":"BUG","title":"FE: \u041f\u0435\u0440\u0435\u043f\u0443\u0442\u0430\u043d\u044b \u043c\u0435\u0441\u0442\u0430\u043c\u0438 \u0440\u0430\u0437\u0434\u0435\u043b\u044b \u041e\u0442\u0447\u0435\u0442\u044b \u0438 \u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430","updated":"2026-03-13","created":"2026-03-03","state":"RELEASED","subsystem":"\u041e\u0442\u0447\u0451\u0442\u044b"},{"state":"RELEASED","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","updated":"2026-03-12","type":"BUG","title":"BE: \u041d\u0435\u0432\u0435\u0440\u043d\u043e \u0432\u044b\u0447\u0438\u0441\u043b\u044f\u0435\u0442\u0441\u044f \u043e\u0448\u0438\u0431\u043a\u0430 no_verification","created":"2026-03-11","id":"UCR-996"},{"type":"RELEASE","title":"\u0415\u0420\u041f Cloud | \u0425\u043e\u0442\u0444\u0438\u043a\u0441 \u0440\u0435\u043b\u0438\u0437 11.03 | v2.0-hotfix.1","updated":"2026-03-11","state":"RELEASED","subsystem":"-","id":"UCR-994","created":"2026-03-11"},{"created":"2026-03-11","id":"UCR-997","updated":"2026-03-11","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","state":"RELEASED","type":"BUG","title":"BE: \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u043f\u0435\u0440\u0435\u0441\u0447\u0435\u0442\u0435 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0439, \u0435\u0441\u043b\u0438 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0439 \u0435\u0441\u0442\u044c \u0442\u0438\u043f geo_region+geo_adress"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u041c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f","title":"BE: \u041c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u044f \u0441 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u043d\u044b\u043c \u0444\u043b\u0430\u0433\u043e\u043c is_enabled  \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u044e\u0442\u0441\u044f \u0432 \u0441\u0447\u0435\u0442\u0447\u0438\u043a\u0435 \u043c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u0439 \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","type":"BUG","created":"2026-01-28","id":"UCR-862"},{"type":"BUG","title":"BE: \u041d\u0435 \u0441\u043e\u0437\u0434\u0430\u0435\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u044c \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 employees  \u043f\u0440\u0438 \u043f\u043e\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u0432\u0442\u043e\u0440\u043e\u0433\u043e \u0442\u0430\u043a\u043e\u0433\u043e \u0436\u0435 \u0440\u0430\u0431\u043e\u0442\u043d\u0438\u043a\u0430","state":"RELEASED","subsystem":"\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0445","updated":"2026-03-11","id":"UCR-866","created":"2026-01-28"},{"created":"2026-01-28","id":"UCR-865","updated":"2026-03-11","state":"RELEASED","subsystem":"\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0445","type":"BUG","title":"BE: \u041d\u0435 \u0441\u043e\u0437\u0434\u0430\u0435\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u044c \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 medics  \u043f\u0440\u0438 \u043f\u043e\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u0432\u0442\u043e\u0440\u043e\u0433\u043e \u0442\u0430\u043a\u043e\u0433\u043e \u0436\u0435 \u043c\u0435\u0434\u0438\u043a\u0430"},{"created":"2025-08-11","id":"UCR-705","subsystem":"\u041e\u0442\u0447\u0451\u0442\u044b","state":"RELEASED","updated":"2026-03-11","type":"TECH TASK","title":"BE: \u0412\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u0432 \u0432\u044b\u0431\u043e\u0440\u043a\u0443 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u044e\u044e \u0434\u0430\u0442\u0443 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043f\u043e\u0432\u0435\u0440\u043a\u0438"},{"id":"UCR-891","created":"2026-02-13","title":"BE: \u0423\u0432\u0435\u043b\u0438\u0447\u0438\u0442\u044c \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u043d\u044b\u0445 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432 \u0432 issuer \u0434\u043e 1000","type":"TECH TASK","state":"RELEASED","subsystem":"API","updated":"2026-03-11"},{"type":"BUG","title":"BE: \u041d\u0435\u0432\u0435\u0440\u043d\u043e\u0435 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0442\u0435\u043c\u044b \u0432 \u043f\u0438\u0441\u044c\u043c\u0430","updated":"2026-03-11","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","id":"UCR-893","created":"2026-02-13"},{"created":"2026-02-20","id":"UCR-939","updated":"2026-03-11","state":"RELEASED","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","title":"BE: \u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0438\u043f \u041c\u0418 (500)","type":"BUG"},{"updated":"2026-03-11","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"RELEASED","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435  shortname \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438 \u0438 \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044c \u0435\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435","type":"FEATURE","created":"2026-01-28","id":"UCR-861"},{"title":"BE: 500 \u0432 \u043e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u0441\u043f\u0438\u0441\u043a\u0430 \u041c\u0418","type":"BUG","subsystem":"API","state":"RELEASED","updated":"2026-03-11","id":"UCR-944","created":"2026-02-24"},{"type":"BUG","title":"BE: 500 \u0432 \u043e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u041c\u0418 \u043f\u043e \u0437\u0430\u0432\u043e\u0434\u0441\u043a\u043e\u043c\u0443 \u043d\u043e\u043c\u0435\u0440\u0443","state":"RELEASED","subsystem":"API","updated":"2026-03-11","id":"UCR-943","created":"2026-02-24"},{"state":"RELEASED","subsystem":"API","created":"2026-02-24","updated":"2026-03-11","type":"BUG","title":"BE: \u041e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043c\u0435\u0442\u043e\u0434 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u044f \u041c\u0418 \u043f\u043e \u0435\u0433\u043e \u0437\u0430\u0432\u043e\u0434\u0441\u043a\u043e\u043c\u0443 \u043d\u043e\u043c\u0435\u0440\u0443 \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u0438","id":"UCR-945"},{"title":"\u0414\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0442\u0438\u043f\u044b \u043c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u0439","type":"FEATURE","state":"RELEASED","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-11","id":"UCR-831","created":"2026-01-20"},{"updated":"2026-03-11","subsystem":"\u0418\u043d\u0444\u0440\u0430\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430","state":"RELEASED","type":"BUG","title":"BE: \u041d\u0435 \u0441\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0435\u0442 \u043a\u0440\u043e\u043d-\u0434\u0436\u043e\u0431\u0430 exams-processed \u043d\u0430 qa-\u0441\u0442\u0435\u043d\u0434\u0435","created":"2026-02-24","id":"UCR-946"},{"title":"BE: 500 \u0432 \u043e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043c\u0435\u0442\u043e\u0434 get /api/mobile/v1/exams/","type":"BUG","updated":"2026-03-11","state":"RELEASED","subsystem":"API","id":"UCR-929","created":"2026-02-19"},{"title":"FE: \u041f\u0440\u043e\u0432\u0435\u0441\u0442\u0438 \u0430\u0443\u0434\u0438\u0442 \u0415\u0420\u041f","type":"TECH TASK","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-11","id":"UCR-815","created":"2025-10-22"},{"title":"\u041c\u043e\u0434\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 ucr.exams. \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u0430\u0440\u0442\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435. \u0418\u0441\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0432\u0435\u0449\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u043e\u043a\u0430\u0437\u0430\u043b\u0438 \u0441\u0435\u0431\u044f \u043f\u043b\u043e\u0445\u043e.","type":"TECH TASK","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","state":"RELEASED","updated":"2026-03-11","id":"UCR-840","created":"2026-01-21"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","created":"2026-02-12","id":"UCR-889","type":"TECH TASK","title":"BE: \u041d\u0435 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u043f\u0440\u0438\u0447\u0438\u043d\u0430 \u043d\u0435 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0430 \u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0443 exams, \u0435\u0441\u043b\u0438 \u043e\u0441\u043c\u043e\u0442\u0440- \u0434\u0443\u0431\u043b\u044e \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0433\u043e"},{"id":"UCR-972","created":"2026-03-02","type":"TECH TASK","title":"FE: \u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043d\u0435\u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u043a\u043e\u0434","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-11"},{"title":"FE: \u041d\u0435 \u043e\u0442\u043c\u0435\u0447\u0435\u043d\u043e \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u043c \u043f\u043e\u043b\u0435 \u043d\u0430\u0447\u0430\u043b\u0430 \u0441\u0440\u043e\u043a\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043c\u0435\u0434.\u043b\u0438\u0446\u0435\u043d\u0437\u0438\u0438 \u043f\u0440\u0438 \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438 \u041c\u041e","type":"BUG","state":"RELEASED","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","updated":"2026-03-11","id":"UCR-979","created":"2026-03-03"},{"id":"UCR-978","type":"BUG","title":"FE: \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0438 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438 \u043f\u043e\u043b\u044f \u0441\u0440\u043e\u043a\u0430 \u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043c\u0435\u0434.\u043b\u0438\u0446\u0435\u043d\u0437\u0438\u0438 \u0432 \u0444\u043e\u0440\u043c\u0435 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u041c\u041e","updated":"2026-03-11","created":"2026-03-03","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"RELEASED"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","type":"BUG","title":"FE: \u041e\u0420\u0413\u041d\u0418\u041f \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d \u0434\u043b\u044f \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u041c\u041e \u0442\u0438\u043f\u0430 \u0418\u041f","created":"2026-03-02","id":"UCR-977"},{"id":"UCR-892","created":"2026-02-13","title":"BE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0435 \u0442\u0438\u043f\u0430 geo_adress","type":"TECH TASK","state":"RELEASED","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","updated":"2026-03-11"},{"id":"UCR-839","created":"2026-01-21","type":"TECH TASK","title":"\u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u0440\u0430\u0431\u043e\u0442\u0443 \u0441 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f\u043c\u0438 \u0432 \u043a\u043e\u0434","updated":"2026-03-11","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","state":"RELEASED"},{"title":"FE: \u0421\u0431\u0440\u0430\u0441\u044b\u0432\u0430\u044e\u0442\u0441\u044f \u0444\u0438\u043b\u044c\u0442\u0440\u044b \u0432 \u0441\u043f\u0438\u0441\u043a\u0435 \u041c\u041e, \u0435\u0441\u043b\u0438 \u043f\u0435\u0440\u0435\u0439\u0442\u0438 \u0432 \u0434\u0440\u0443\u0433\u043e\u0439 \u0440\u0430\u0437\u0434\u0435\u043b \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0438 \u0432\u0435\u0440\u043d\u0443\u0442\u044c\u0441\u044f \u043e\u0431\u0440\u0430\u0442\u043d\u043e","type":"BUG","id":"UCR-980","created":"2026-03-03","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"RELEASED","updated":"2026-03-11"},{"created":"2025-08-12","id":"UCR-712","updated":"2026-03-11","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","title":"FE: \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u043e\u0448\u0438\u0431\u043a\u0438 \u043d\u0430 \u0444\u0440\u043e\u043d\u0442\u0435, \u0435\u0441\u043b\u0438 \u0431\u044d\u043a \u043f\u0440\u0438\u0441\u044b\u043b\u0430\u0435\u0442 500 \u043a\u043e\u0434","type":"BUG"},{"id":"UCR-990","created":"2026-03-04","type":"BUG","title":"FE: \u041f\u0440\u0438 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0435 \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u043d\u0435\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0433\u043e \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044f \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043e\u0448\u0438\u0431\u043a\u0430 \u043d\u0430 UI","updated":"2026-03-11","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED"},{"created":"2026-03-04","id":"UCR-988","state":"RELEASED","subsystem":"API","updated":"2026-03-11","title":"BE: \u041d\u0435 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u0437 MC \u0441 \u043d\u043e\u0432\u043e\u0433\u043e \u041f\u0410\u041a","type":"BUG"},{"state":"RELEASED","subsystem":"API","updated":"2026-03-11","type":"BUG","title":"BE: \u041d\u0435 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u043e\u0441\u043c\u043e\u0442\u0440\u044b \u0438\u0437 \u041c\u041a \u0432 \u0415\u0420\u041f","created":"2026-03-04","id":"UCR-989"},{"type":"BUG","title":"BE: \u041e\u0441\u043c\u043e\u0442\u0440\u044b, \u043f\u0435\u0440\u0435\u0434\u0430\u043d\u043d\u044b\u0435 \u043c\u0435\u0442\u043e\u0434\u043e\u043c v1/exams, \u041d\u0415 \u043e\u0431\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u044e\u0442\u0441\u044f \u0430\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u043e","updated":"2026-03-11","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","state":"RELEASED","id":"UCR-992","created":"2026-03-05"},{"type":"TECH TASK","title":"\u0421\u0434\u0435\u043b\u0430\u0442\u044c \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u043f\u0440\u043e\u0446\u0435\u0441\u0441 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438 \u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0430\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u044b\u043c","updated":"2026-03-11","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","state":"RELEASED","id":"UCR-834","created":"2026-01-20"},{"id":"UCR-833","created":"2026-01-20","type":"TECH TASK","title":"\u041d\u0430\u0432\u0435\u0441\u0442\u0438 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0432 \u0440\u0430\u0431\u043e\u0442\u0435 \u0441 \u043f\u043e\u0432\u0435\u0440\u043a\u0430\u043c\u0438","subsystem":"\u0422\u0435\u0445\u043d\u0438\u043d\u0430","state":"RELEASED","updated":"2026-03-11"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","title":"BE:  \u0412\u044b\u043d\u0435\u0441\u0442\u0438 \u043f\u0440\u043e\u0446\u0435\u0441\u0441 \u0433\u0435\u043e\u043a\u043e\u0434\u0438\u043d\u0433\u0430 \u0438 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0439 \u0438\u0437 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u0430 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438 \u043e\u0441\u043c\u043e\u0442\u0440\u0430","type":"TECH TASK","created":"2026-03-10","id":"UCR-993"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0445","type":"TECH TASK","title":"[\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043d\u0430 stage] \u0420\u0435\u0444\u0430\u043a\u0442\u043e\u0440\u0438\u043d\u0433 \u0440\u0435\u0433\u0438\u043e\u043d\u043e\u0432 \u0438 \u043e\u043a\u0440\u0443\u0433\u043e\u0432","created":"2026-01-20","id":"UCR-832"},{"id":"UCR-795","created":"2025-09-02","title":"FE: \u0414\u0432\u043e\u0439\u043d\u043e\u0439 \u0441\u043a\u0440\u043e\u043b\u043b \u0432 \u0433\u0435\u043d\u0435\u0440\u0430\u043b\u044c\u0441\u043a\u043e\u043c \u043e\u0442\u0447\u0435\u0442\u0435","type":"BUG","updated":"2026-03-11","subsystem":"\u041e\u0442\u0447\u0451\u0442\u044b","state":"RELEASED"},{"updated":"2026-03-11","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","type":"BUG","title":"FE: \u0418\u0437\u0431\u044b\u0442\u043e\u0447\u043d\u0430\u044f \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f \u043f\u043e\u043b\u044f \u0026quot;\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435\u0026quot; \u043f\u0440\u0438 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u0438/\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044f","created":"2026-03-03","id":"UCR-982"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","type":"BUG","title":"FE: \u041d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u044e\u0442\u0441\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043f\u0440\u0438 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0438 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0438\u0437 \u0438\u043d\u0444\u043e \u043e \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435","created":"2025-08-26","id":"UCR-766"},{"state":"RELEASED","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","updated":"2026-03-11","title":"FE: \u0417\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a \u0440\u0430\u0437\u0434\u0435\u043b\u0430 [\u0418\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f]  \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u041c\u041e \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043c\u0430\u043a\u0435\u0442\u0443","type":"BUG","created":"2025-08-05","id":"UCR-660"},{"id":"UCR-733","created":"2025-08-14","title":"FE: \u041e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043f\u043e\u0434\u0432\u0435\u0440\u0436\u0434\u0430\u044e\u0449\u0438\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u043f\u0440\u0438 \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e\u0441\u0442\u0438 \u0442\u0438\u043f\u0430 \u041c\u0418 \u0434\u043b\u044f \u041c\u041e","type":"BUG","updated":"2026-03-11","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"RELEASED"},{"created":"2025-06-25","id":"UCR-487","updated":"2026-03-11","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","title":"\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0434\u043e\u043f\u0443\u0441\u0442\u0438\u043c\u044b\u0445 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432 \u0432 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0438 \u0432\u043b\u0430\u0436\u043d\u043e\u0441\u0442\u0438 \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044e\u0442 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c","type":"BUG"},{"created":"2025-05-16","id":"UCR-435","updated":"2026-03-11","subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","state":"RELEASED","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044e \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f \u0432 \u0415\u0420\u041f","type":"FEATURE"},{"id":"UCR-548","created":"2025-07-04","type":"BUG","title":"FE: \u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043f\u043e\u0441\u043b\u0435 \u0443\u0441\u043f\u0435\u0448\u043d\u043e\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043c\u0430\u043a\u0435\u0442\u0443","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-11"},{"title":"FE: \u0424\u043e\u0440\u043c\u0430 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u043e\u0432\u043e\u0439 \u043f\u0440\u043e\u0448\u0438\u0432\u043a\u0438 \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043c\u0430\u043a\u0435\u0442\u0443","type":"BUG","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","id":"UCR-579","created":"2025-07-09"},{"id":"UCR-830","created":"2026-01-20","type":"FEATURE","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b \u00ab\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0438\u00bb","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-11"},{"subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","type":"BUG","title":"FE: \u041d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u041a\u0440\u0430\u0442\u043a\u043e\u0435 \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u041c\u041e","created":"2026-02-20","id":"UCR-934"},{"subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","title":"FE: \u041b\u043e\u043c\u0430\u0435\u0442\u0441\u044f \u0432\u0435\u0440\u0441\u0442\u043a\u0430 \u0444\u043e\u0440\u043c\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0440\u043e\u0448\u0438\u0432\u043a\u0438 \u043f\u0440\u0438 \u043e\u0448\u0438\u0431\u043a\u0430\u0445 \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0438","type":"BUG","created":"2025-07-04","id":"UCR-562"},{"created":"2025-07-04","id":"UCR-555","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","type":"BUG","title":"FE: \u0412\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u0443\u0434\u0430\u043b\u0435\u043d\u043d\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0432 \u043f\u043e\u043b\u0435 \u0441 \u043d\u043e\u043c\u0435\u0440\u043e\u043c \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430"},{"title":"FE: \u0422\u0435\u043a\u0441\u0442 \u043e\u0448\u0438\u0431\u043a\u0438 \u043f\u0440\u0438 \u043f\u043e\u0438\u0441\u043a\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0439 \u041c\u041e \u043c\u0435\u043d\u0435\u0435 \u0447\u0435\u043c \u043f\u043e \u0442\u0440\u0435\u043c \u0441\u0438\u043c\u0432\u043e\u043b\u0430\u043c  \u0432 \u0441\u043f\u0438\u0441\u043a\u0435 \u0442\u0438\u043f\u043e\u0432 \u041c\u0418 - \u043d\u0430 \u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u043e\u043c \u044f\u0437\u044b\u043a\u0435","type":"BUG","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","id":"UCR-556","created":"2025-07-04"},{"subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED","updated":"2026-03-11","type":"BUG","title":"FE: \u0412 \u043f\u043e\u043b\u0435 \u043f\u043e\u0438\u0441\u043a\u0430 \u0442\u0438\u043f\u0430 \u041c\u0418 \u043d\u0435\u0442 \u043a\u0440\u0435\u0441\u0442\u0438\u043a\u0430 \u0434\u043b\u044f \u0431\u044b\u0441\u0442\u0440\u043e\u0439 \u043e\u0447\u0438\u0441\u0442\u043a\u0438","created":"2025-07-09","id":"UCR-577"},{"type":"BUG","title":"FE: \u0412\u0438\u0434 \u0444\u043e\u0440\u043c\u044b \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e\u0441\u0442\u0438 \u041c\u041e \u043f\u0440\u0438 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 \u043f\u043e\u0438\u0441\u043a\u0430 \u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043c\u0430\u043a\u0435\u0442\u0443","updated":"2026-03-11","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"RELEASED","id":"UCR-738","created":"2025-08-15"},{"id":"UCR-573","created":"2025-07-08","type":"BUG","title":"FE: \u041d\u0435 \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0434\u0432\u043e\u0439\u043d\u044b\u0435 \u043f\u0440\u043e\u0431\u0435\u043b\u044b \u043c\u0435\u0436\u0434\u0443 \u0441\u043b\u043e\u0432\u0430\u043c\u0438 \u0432 \u043f\u043e\u043b\u0435 \u043f\u043e\u0438\u0441\u043a\u0430","updated":"2026-03-11","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"RELEASED"},{"state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-03-11","title":"FE: \u041e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u043e \u0442\u043e\u043c, \u0447\u0442\u043e \u043f\u043e\u0438\u0441\u043a \u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e 3\u043c \u0438 \u0431\u043e\u043b\u0435\u0435 \u0441\u0438\u043c\u0432\u043e\u043b\u0430\u043c","type":"BUG","created":"2025-07-11","id":"UCR-590"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","created":"2025-07-22","id":"UCR-618","type":"BUG","title":"FE: \u041d\u0435 \u0441\u043e\u043a\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0439 \u041c\u041e \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u0442\u0438\u043f\u0430 \u041c\u0418"},{"subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"RELEASED","updated":"2026-03-11","type":"BUG","title":"","created":"2026-02-25","id":"UCR-949"},{"updated":"2026-03-11","state":"RELEASED","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","type":"BUG","title":"FE: \u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0435\u0442\u0441\u044f \u043f\u043e\u0438\u0441\u043a \u043f\u0440\u0438 \u0432\u0432\u043e\u0434\u0435 \u043e\u0442 1 \u0441\u0438\u043c\u0432\u043e\u043b\u0430 \u0432 \u043f\u043e\u043b\u0435 \u043f\u043e\u0438\u0441\u043a\u0430, \u0435\u0441\u043b\u0438 \u0435\u0449\u0435 \u0435\u0441\u0442\u044c \u043f\u0440\u043e\u0431\u0435\u043b\u044b","created":"2025-07-03","id":"UCR-542"},{"state":"RELEASED","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-11","type":"BUG","title":"BE: \u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u0441 \u0442\u0438\u043f\u043e\u043c \u041c\u0418 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0434\u043b\u044f \u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430 \u041c\u041e \u0438\u0437 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438, \u043a\u043e\u0442\u043e\u0440\u043e\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d \u0442\u0430\u043a\u043e\u0439 \u0442\u0438\u043f \u041c\u0418","created":"2026-03-03","id":"UCR-981"},{"created":"2026-03-03","id":"UCR-983","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"RELEASED","updated":"2026-03-11","type":"BUG","title":"FE: \u041d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u0442\u0441\u044f \u0441\u043d\u044f\u0442\u0438\u0435 \u0447\u0435\u043a-\u0431\u043e\u043a\u0441\u0430 \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435 \u0442\u0438\u043f\u0430 \u041c\u0418 \u043f\u0440\u0438 \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u0445 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0439"},{"id":"UCR-985","created":"2026-03-03","title":"BE: \u041c\u0438\u043d\u0438-\u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u0442\u0438\u043f\u0430 \u041c\u0418 \u043d\u0435 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442\u0441\u044f \u0432 \u0441\u043f\u0438\u0441\u043a\u0435 \u0434\u043b\u044f \u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430 \u041c\u041e, \u043a\u043e\u0442\u043e\u0440\u0430\u044f \u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e\u0439 \u0438\u043b\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0439, \u043d\u043e \u0443 \u043d\u0435\u0435 \u0435\u0441\u0442\u044c \u041c\u0418 \u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0442\u0438\u043f\u0430","type":"BUG","updated":"2026-03-11","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"RELEASED"},{"title":"FE: \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0438 \u043f\u0443\u0441\u0442\u044b\u0445 \u043f\u043e\u043b\u0435\u0439 \u043f\u0440\u0438 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u0438/\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438 \u0422\u0438\u043f\u0430 \u041c\u0418","type":"BUG","state":"RELEASED","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-11","id":"UCR-986","created":"2026-03-04"},{"created":"2026-03-04","id":"UCR-991","state":"RELEASED","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-03-11","title":"","type":"BUG"},{"type":"TASK","title":"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443 \u043d\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0443 \u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0443 exams","updated":"2026-03-05","subsystem":"API","state":"DONE","id":"UCR-974","created":"2026-03-02"},{"subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b","state":"DONE","created":"2026-02-27","updated":"2026-03-02","title":"\u0422\u041a \u043f\u043e \u0430\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u043e\u0439 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0435 \u043e\u0441\u043c\u043e\u0442\u0440\u0430","type":"TASK","id":"UCR-970"},{"subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","state":"DONE","updated":"2026-02-27","title":"FE: \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f/\u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f","type":"TASK","created":"2025-07-01","id":"UCR-502"},{"created":"2025-07-01","id":"UCR-501","updated":"2026-02-27","subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","state":"DONE","type":"TASK","title":"BE: \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f/\u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f"},{"updated":"2026-02-26","subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","state":"DONE","type":"TASK","title":"\u0422\u041a: UCR-435 \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044e \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f \u0432 \u0415\u0420\u041f","created":"2026-02-24","id":"UCR-947"},{"id":"UCR-876","created":"2026-02-02","title":"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c \u043a\u043e\u0440\u0440\u0435\u043a\u043d\u043e\u0441\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0445 \u0432 \u0411\u0414 \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0430\u0445 medics \u0438 emoloyees","type":"TASK","updated":"2026-02-26","state":"DONE","subsystem":"\u041e\u0441\u043c\u043e\u0442\u0440\u044b"},{"created":"2026-02-06","id":"UCR-931","updated":"2026-02-26","subsystem":"\u0418\u043d\u0444\u0440\u0430\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430","state":"DONE","title":"\u043f\u0440\u0430\u0432\u043a\u0438 \u0432 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0435 \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u0438","type":"TASK"},{"created":"2026-02-19","id":"UCR-928","updated":"2026-02-25","state":"DONE","subsystem":"\u041c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f","title":"QA: \u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0443 \u043e\u0442\u0432\u0435\u0442\u0430 \u0432 \u043c\u0435\u0442\u043e\u0434\u0435 \u043d\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u044f \u041c\u0418","type":"TASK"},{"state":"DONE","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","updated":"2026-02-20","title":"\u0422\u041a: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 shortname \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438 \u0438 \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044c \u0435\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435","type":"TASK","created":"2026-02-18","id":"UCR-921"},{"updated":"2026-02-19","state":"DONE","subsystem":"\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0445","title":"\u0423\u0434\u0430\u043b\u0438\u0442\u044c CONSTRAINT FK_people_last_exam_id","type":"TASK","created":"2026-02-17","id":"UCR-908"},{"created":"2026-02-17","id":"UCR-901","updated":"2026-02-19","subsystem":"\u041c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f","state":"DONE","title":"\u0421\u043a\u0440\u044b\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b \u0026quot;\u041c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f\u0026quot; \u043d\u0430 \u0441\u0442\u0435\u043d\u0434\u0430\u0445 \u0415\u0420\u041f","type":"TASK"},{"id":"UCR-887","created":"2026-02-11","title":"\u041f\u043e\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043a\u0435\u0439\u0441 \u043d\u0430 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0442\u0438\u043f\u0430 \u041c\u0418 \u0415\u0420\u041f","type":"TASK","state":"DONE","subsystem":"API","updated":"2026-02-18"},{"id":"UCR-882","created":"2026-02-10","type":"TASK","title":"FE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435  shortname \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438 \u0438 \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044c \u0435\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","state":"DONE","updated":"2026-02-18"},{"subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"DONE","updated":"2026-02-18","title":"FE: \u041c\u0438\u0433\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0442\u0438\u043f\u044b \u041c\u0418 \u043d\u0430 \u043d\u043e\u0432\u044b\u0439 API","type":"TASK","created":"2026-02-17","id":"UCR-898"},{"id":"UCR-843","created":"2026-01-23","type":"TASK","title":"FE: \u0414\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0442\u0438\u043f\u044b \u043c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u0439","state":"DONE","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-02-18"},{"type":"TASK","title":"FE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b \u0026quot;\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0438\u0026quot;","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"DONE","updated":"2026-02-16","id":"UCR-841","created":"2026-01-23"},{"created":"2026-02-10","id":"UCR-883","state":"DONE","subsystem":"\u041c\u0435\u0434. \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438","updated":"2026-02-16","type":"TASK","title":"BE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435  shortname \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0438 \u0438 \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044c \u0435\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435"},{"updated":"2026-02-16","state":"DONE","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","title":"BE: \u0414\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0442\u0438\u043f\u044b \u043c\u0435\u0434\u0438\u0437\u0434\u0435\u043b\u0438\u0439","type":"TASK","created":"2026-01-23","id":"UCR-844"},{"created":"2026-01-23","id":"UCR-842","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"DONE","updated":"2026-02-16","title":"BE: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b \u0026quot;\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0438\u0026quot;","type":"TASK"},{"type":"TASK","title":"FE: Developer Experience","updated":"2026-02-16","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"DONE","id":"UCR-857","created":"2026-01-27"},{"id":"UCR-856","created":"2026-01-27","title":"FE: \u0412\u043d\u0435\u0434\u0440\u0435\u043d\u0438\u0435 \u043a\u044d\u0448\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f REST-\u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432","type":"TASK","state":"DONE","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-02-16"},{"updated":"2026-02-16","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","state":"DONE","created":"2026-01-27","id":"UCR-855","title":"FE: \u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043c\u0435\u043c\u043e\u0438\u0437\u0430\u0446\u0438\u0438","type":"TASK"},{"updated":"2026-02-16","state":"DONE","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","title":"FE: \u0423\u043d\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f \u0440\u0430\u0431\u043e\u0442\u044b \u0441 \u0444\u043e\u0440\u043c\u0430\u043c\u0438","type":"TASK","created":"2026-01-27","id":"UCR-854"},{"id":"UCR-853","created":"2026-01-27","type":"TASK","title":"FE: \u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u0434\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u043b\u043e\u0433\u0438\u043a\u0438","state":"DONE","subsystem":"\u0413\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u043e","updated":"2026-02-16"},{"id":"UCR-869","created":"2026-01-28","type":"TASK","title":"","updated":"2026-02-09","state":"IN PROGRESS","subsystem":"-"},{"subsystem":"-","state":"DONE","updated":"2026-02-04","type":"TASK","title":"\u0422\u041a: \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0440\u0430\u0437\u0434\u0435\u043b \u00ab\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0438\u00bb","created":"2026-01-29","id":"UCR-873"},{"created":"2025-08-22","id":"UCR-757","updated":"2026-01-28","subsystem":"\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0430\u0446\u0438\u044f","state":"TODO","type":"TECH TASK","title":"\u0412 UserContext \u0437\u0430\u043c\u0435\u0442\u0438\u0442\u044c UserEntity \u043d\u0430 \u0442\u0438\u043f \u0431\u0435\u0437 \u043f\u0440\u0438\u0432\u044f\u0437\u043a\u0438 \u043a typeorm"},{"state":"TODO","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","updated":"2026-01-15","title":"\u0422\u041a: \u0421\u043f\u0438\u0441\u043e\u043a \u041c\u0418 [\u0436\u0434\u0435\u0442 \u0443\u0442\u043e\u0447\u043d\u0435\u043d\u043d\u044b\u0445 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u0439]","type":"TASK","created":"2025-07-15","id":"UCR-594"},{"created":"2025-07-01","id":"UCR-504","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418","state":"DONE","updated":"2025-09-04","type":"TASK","title":"FE: \u0421\u043f\u0438\u0441\u043e\u043a \u041c\u0418"},{"id":"UCR-503","created":"2025-07-01","type":"TASK","title":"","updated":"2025-08-28","state":"DONE","subsystem":"\u0422\u0438\u043f\u044b \u041c\u0418"},{"id":"UCR-338","created":"2025-01-24","title":"\u0422\u041a: API \u0421\u043f\u0438\u0441\u043e\u043a \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439","type":"TASK","state":"FOR REVIEW","subsystem":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438","updated":"2025-06-26"},{"type":"TASK","title":"\u0422\u041a: \u0026quot;\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439\u0026quot;","state":"FOR REVIEW","subsystem":"-","updated":"2025-06-26","id":"UCR-333","created":"2025-01-21"}] };
+
+    const COLORS = {
+      'TODO': 'rgba(139, 148, 158, 0.8)',
+      'DRAFT': 'rgba(210, 153, 34, 0.8)',
+      'FOR GROOMING': 'rgba(163, 113, 247, 0.8)',
+      'FOR ANALYSIS': 'rgba(88, 166, 255, 0.8)',
+      'IN PROGRESS': 'rgba(63, 185, 80, 0.8)',
+      'FOR TEST': 'rgba(49, 109, 161, 0.8)',
+      'FOR VERIFICATION': 'rgba(49, 109, 161, 0.8)',
+      'REVIEW': 'rgba(163, 113, 247, 0.8)',
+      'FOR REVIEW': 'rgba(163, 113, 247, 0.8)',
+      'DONE': 'rgba(63, 185, 80, 0.9)',
+      'RELEASED': 'rgba(63, 185, 80, 1)'
+    };
+
+    const stateOrder = ['TODO', 'DRAFT', 'FOR GROOMING', 'FOR ANALYSIS', 'IN PROGRESS', 'FOR TEST', 'FOR VERIFICATION', 'REVIEW', 'FOR REVIEW', 'DONE', 'RELEASED'];
+
+    function getDateRange() {
+      let min = '9999-99-99', max = '0000-00-00';
+      DATA.tasks.forEach(t => {
+        if (t.created && t.created < min) min = t.created;
+        if (t.updated && t.updated > max) max = t.updated;
+        if (t.created && t.created > max) max = t.created;
+      });
+      if (max === '0000-00-00') max = new Date().toISOString().slice(0, 10);
+      return { min, max };
+    }
+
+    function buildCFDData() {
+      const { min, max } = getDateRange();
+      const dates = [];
+      const start = new Date(min);
+      const end = new Date(max);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
+        dates.push(d.toISOString().slice(0, 10));
+      }
+      if (dates.length === 0 || dates[dates.length - 1] !== max) dates.push(max);
+
+      const now = new Date(max).getTime();
+      const datasets = {};
+      stateOrder.forEach(s => { datasets[s] = dates.map(() => 0); });
+
+      DATA.tasks.forEach(t => {
+        const created = t.created ? new Date(t.created).getTime() : now;
+        const stateIdx = stateOrder.indexOf(t.state);
+        if (stateIdx < 0) return;
+
+        dates.forEach((dateStr, i) => {
+          const d = new Date(dateStr).getTime();
+          if (d < created) return;
+          const progress = (d - created) / Math.max(1, now - created);
+          const stateAtDate = Math.min(stateIdx, Math.floor(progress * (stateIdx + 1)));
+          const stateName = stateOrder[stateAtDate];
+          datasets[stateName][i]++;
+        });
+      });
+
+      return { dates, datasets };
+    }
+
+    function buildCFD() {
+      const { dates, datasets } = buildCFDData();
+      const cfdOrder = stateOrder.filter(s => datasets[s].some(v => v > 0)).reverse();
+      const stacked = cfdOrder.map((state) => ({
+        label: state,
+        data: datasets[state],
+        backgroundColor: COLORS[state] || 'rgba(139, 148, 158, 0.8)',
+        borderColor: (COLORS[state] || 'rgba(139, 148, 158, 0.8)').replace(/[\d.]+\)$/, '1)'),
+        borderWidth: 1,
+        fill: true
+      }));
+
+      new Chart(document.getElementById('cfd'), {
+        type: 'line',
+        data: {
+          labels: dates.map(d => d.slice(5)),
+          datasets: stacked
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.06)' } },
+            y: { stacked: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { stepSize: 1 } }
+          }
+        }
+      });
+    }
+
+    function buildStateCharts() {
+      const counts = {};
+      stateOrder.forEach(s => counts[s] = 0);
+      DATA.tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
+
+      const labels = stateOrder.filter(s => counts[s] > 0);
+      const values = labels.map(s => counts[s]);
+      const colors = labels.map(s => COLORS[s] || 'rgba(139, 148, 158, 0.8)');
+
+      new Chart(document.getElementById('statePie'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+
+      new Chart(document.getElementById('stateBar'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Задач', data: values, backgroundColor: colors }] },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' } },
+            y: { grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function buildBurndown() {
+      const total = DATA.tasks.length;
+      const { min } = getDateRange();
+      const projectEnd = '2026-04-30';
+      const dates = [];
+      const start = new Date(min);
+      const end = new Date(projectEnd);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
+        dates.push(d.toISOString().slice(0, 10));
+      }
+      if (dates[dates.length - 1] !== projectEnd) dates.push(projectEnd);
+
+      const ideal = dates.map((_, i) => Math.max(0, total - (total / Math.max(1, dates.length - 1)) * i));
+      const doneCount = DATA.tasks.filter(t => t.state === 'DONE' || t.state === 'RELEASED').length;
+      const actual = dates.map((_, i) => {
+        if (i === dates.length - 1) return total - doneCount;
+        return total - Math.floor((doneCount * i) / Math.max(1, dates.length - 1));
+      });
+
+      new Chart(document.getElementById('burndown'), {
+        type: 'line',
+        data: {
+          labels: dates.map(d => d.slice(5)),
+          datasets: [
+            { label: 'Идеал', data: ideal, borderColor: 'rgba(139, 148, 158, 0.6)', borderDash: [5, 5], fill: false },
+            { label: 'Факт (остаток)', data: actual, borderColor: 'rgba(88, 166, 255, 1)', fill: false }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.06)' } },
+            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' } }
+          }
+        }
+      });
+    }
+
+    function buildTypePie() {
+      const counts = {};
+      DATA.tasks.forEach(t => { counts[t.type || '—'] = (counts[t.type || '—'] || 0) + 1; });
+      const labels = Object.keys(counts);
+      const values = Object.values(counts);
+      const colors = ['#58a6ff', '#a371f7', '#3fb950', '#d29922', '#f85149'];
+
+      new Chart(document.getElementById('typePie'), {
+        type: 'pie',
+        data: {
+          labels,
+          datasets: [{ data: values, backgroundColor: labels.map((_, i) => colors[i % colors.length]) }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+    }
+
+    function buildTable() {
+      const tbody = document.getElementById('taskTable');
+      DATA.tasks
+        .sort((a, b) => stateOrder.indexOf(a.state) - stateOrder.indexOf(b.state))
+        .forEach(t => {
+          const tr = document.createElement('tr');
+          const title = (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : '');
+          const stateClass = 'state-' + (t.state || '').replace(/\s/g, '\\ ');
+          tr.innerHTML = '<td><code>' + (t.id || '').replace(/</g, '&lt;') + '</code></td>' +
+            '<td>' + title.replace(/</g, '&lt;') + '</td>' +
+            '<td><span class="state-tag ' + stateClass + '">' + (t.state || '').replace(/</g, '&lt;') + '</span></td>' +
+            '<td>' + (t.type || '—').replace(/</g, '&lt;') + '</td>' +
+            '<td>' + (t.subsystem || '—').replace(/</g, '&lt;') + '</td>' +
+            '<td>' + (t.created || '—').replace(/</g, '&lt;') + '</td>';
+          tbody.appendChild(tr);
+        });
+    }
+
+    function updateSummary() {
+      const tasks = DATA.tasks;
+      document.getElementById('totalTasks').textContent = tasks.length;
+      document.getElementById('inProgress').textContent = tasks.filter(t =>
+        ['IN PROGRESS', 'FOR TEST', 'FOR VERIFICATION', 'REVIEW', 'FOR REVIEW'].includes(t.state)
+      ).length;
+      document.getElementById('done').textContent = tasks.filter(t =>
+        ['DONE', 'RELEASED'].includes(t.state)
+      ).length;
+      document.getElementById('backlog').textContent = tasks.filter(t =>
+        ['TODO', 'DRAFT', 'FOR GROOMING', 'FOR ANALYSIS'].includes(t.state)
+      ).length;
+    }
+
+    updateSummary();
+    buildCFD();
+    buildStateCharts();
+    buildBurndown();
+    buildTypePie();
+    buildTable();
+  </script>
+</body>
+</html>
